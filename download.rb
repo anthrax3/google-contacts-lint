@@ -1,11 +1,13 @@
-require 'pp'
-require 'pry'
+require 'json'
 
 require 'google/api_client'
-require 'google/api_client/client_secrets'
 require 'google/api_client/auth/installed_app'
+require 'google/api_client/client_secrets'
+
 require 'nokogiri'
-require 'json'
+
+require 'global_phone'
+GlobalPhone.db_path = 'global_phone.json'
 
 def client
   Google::APIClient.new(
@@ -40,28 +42,28 @@ def download client
 end
 
 def merge results
-  results.reduce do |l, r|
-    f = l.at_css 'feed'
-    r.css('entry').map { |e| e.parent = f }
-    l
+  results
+    .map { |d| d.css 'entry' }
+    .flatten
+    .reject { |e| (e > 'gd|phoneNumber').nil? }
+end
+
+def nor
+
+def normalize entries
+  entries.map do |e|
+    pns = (e > 'gd|phoneNumber').map { |e| GlobalPhone.normalize e.text }
+    "#{(e > 'title').text} : #{pns.join ', '}"
   end
 end
 
 def parse results
-  {
-    id: results.at_css('feed id').text,
-    feed: results.at_css('feed > link[rel$=feed]')['href'],
-    author: {
-      name: results.at_css('author name').text,
-      email: results.at_css('author email').text,
-    },
-    entries: results.css('entry').map { |e|
-      {
-        id: e.at_css('id').text,
-        name: e.at_css('title').text,
-      }.tap do |h|
-        (pn = e.at_css 'gd|phoneNumber') && h['pn'] = pn.text
-      end
-    }
-  }
+  results.map do |e|
+    {
+      id: e.at_css('id').text,
+      name: e.at_css('title').text,
+    }.tap do |h|
+      (pn = e.at_css 'gd|phoneNumber') && h['pn'] = pn.text
+    end
+  end
 end
